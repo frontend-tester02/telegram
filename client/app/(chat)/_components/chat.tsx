@@ -11,8 +11,8 @@ import {
 import { messageSchema } from '@/lib/validation'
 import { Paperclip, Send, Smile } from 'lucide-react'
 import { FC, useRef } from 'react'
-import emojies from '@emoji-mart/data'
-import Picker from '@emoji-mart/react'
+// import emojies from '@emoji-mart/data'
+// import Picker from '@emoji-mart/react'
 import { UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
 import { useTheme } from 'next-themes'
@@ -94,13 +94,13 @@ const Chat: FC<Props> = ({ onSendMessage, messageForm }) => {
 							</Button>
 						</PopoverTrigger>
 						<PopoverContent className='p-0 border-none rounded-md absolute right-6 bottom-0'>
-							<Picker
+							{/* <Picker
 								data={emojies}
 								theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
 								onEmojiSelect={(emoji: { native: string }) =>
 									handleEmojiSelect(emoji.native)
 								}
-							/>
+							/> */}
 						</PopoverContent>
 					</Popover>
 
