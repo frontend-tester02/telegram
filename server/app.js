@@ -1,15 +1,21 @@
 require('dotenv').config()
 
 const express = require('express')
-const http = require('http')
+const cors = require('cors')
 const { default: mongoose } = require('mongoose')
-const cookieParser = require('cookie-parser')
 const errorMiddleware = require('./middlewares/error.middleware')
+const { METHODS } = require('http')
 
 const app = express()
 
 // Middleware
 app.use(express.json())
+app.use(
+	cors({
+		origin: process.env.CLIENT_URL,
+		METHODS: ['GET', 'POST', 'PUT', 'DELETE'],
+	})
+)
 
 app.use('/api', require('./routes/index'))
 
