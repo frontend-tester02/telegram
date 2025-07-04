@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import ContactList from './_components/contact-list'
 import { useRouter } from 'next/navigation'
 import AddContact from './_components/add-contact'
@@ -11,9 +12,20 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { emailSchema, messageSchema } from '@/lib/validation'
 import TopChat from './_components/top-chat'
 import Chat from './_components/chat'
+import { useLoading } from '@/hooks/use-loading'
+import { useSession } from 'next-auth/react'
+import { axiosClient } from '@/http/axios'
+import { IError, IUser } from '@/types'
+import { generateToken } from '@/lib/generate-token'
+import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 
 const HomePage = () => {
-	const { currentContact, setCurrentContact } = useCurrentContact()
+	const [contacts, setContacts] = useState<IUser[]>([])
+
+	const { setCreating, setLoading, isLoading } = useLoading()
+	const { currentContact } = useCurrentContact()
+	const { data: session } = useSession()
 	const router = useRouter()
 
 	const contactForm = useForm<z.infer<typeof emailSchema>>({
@@ -31,13 +43,58 @@ const HomePage = () => {
 		},
 	})
 
+	const getContacts = async () => {
+		setLoading(true)
+		const token = await generateToken(session?.currentUser?._id)
+		try {
+			const { data } = await axiosClient.get<{ contacts: IUser[] }>(
+				'/api/user/contacts',
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+			setContacts(data.contacts)
+		} catch {
+			toast('Cannot fetch contacts')
+		} finally {
+			setLoading(false)
+		}
+	}
+
 	useEffect(() => {
 		router.replace('/')
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	const onCreateContact = (values: z.infer<typeof emailSchema>) => {
-		console.log(values)
+	useEffect(() => {
+		if (session?.currentUser?._id) {
+			getContacts()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [session?.currentUser])
+
+	const onCreateContact = async (values: z.infer<typeof emailSchema>) => {
+		setCreating(true)
+		const token = await generateToken(session?.currentUser?._id)
+		try {
+			const { data } = await axiosClient.post<{ contact: IUser }>(
+				'/api/user/contact',
+				values,
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+			setContacts(prev => [...prev, data.contact])
+			toast('Contact added successfully')
+			contactForm.reset()
+		} catch (error: any) {
+			if ((error as IError).response?.data?.message) {
+				return toast((error as IError).response.data.message)
+			}
+			return toast('Something went wrong')
+		} finally {
+			setCreating(false)
+		}
 	}
 
 	const onSendMessage = (values: z.infer<typeof messageSchema>) => {
@@ -48,12 +105,14 @@ const HomePage = () => {
 			{/* Sidebar */}
 			<div className='w-80 h-screen border-r fixed inset-0 z-50'>
 				{/* Loading */}
-				{/* <div className='w-full h-[95vh] flex justify-center items-center'>
-					<Loader2 size={50} className='animate-spin' />
-				</div> */}
+				{isLoading && (
+					<div className='w-full h-[95vh] flex justify-center items-center'>
+						<Loader2 size={50} className='animate-spin' />
+					</div>
+				)}
 
 				{/* Contact list */}
-				<ContactList contacts={contacts} />
+				{!isLoading && <ContactList contacts={contacts} />}
 			</div>
 
 			{/* Chat area */}
@@ -78,20 +137,5 @@ const HomePage = () => {
 		</>
 	)
 }
-
-const contacts = [
-	{
-		email: 'john@gmail.com',
-		_id: '1',
-		avatar: 'https://github.com/shadcn.png',
-		firstName: 'John',
-		lastName: 'Doe',
-		bio: 'Lorem ipsum dolor, sit amet consectetur adipisicing elit. Quis repellat blanditiis hic reiciendis quibusdam voluptatem necessitatibus, minus sint maxime iste impedit cupiditate ab provident doloremque sed dicta, molestias nemo cum.',
-	},
-	{ email: 'amile@gmail.com', _id: '2' },
-	{ email: 'faris@gmail.com', _id: '3' },
-	{ email: 'abdo@gmail.com', _id: '4' },
-	{ email: 'billi@gmail.com', _id: '5' },
-]
 
 export default HomePage
