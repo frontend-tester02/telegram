@@ -51,7 +51,7 @@ const AddContact: FC<Props> = ({ contactForm, onCreateContact }) => {
 									</FormItem>
 								)}
 							/>
-							<Button type='submit' className='w-full' size={'lg'}>
+							<Button type='submit' className='w-full text-white ' size={'lg'}>
 								Submit
 							</Button>
 						</form>

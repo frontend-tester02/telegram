@@ -14,13 +14,19 @@ import {
 	InputOTPSlot,
 } from '../ui/input-otp'
 import { REGEXP_ONLY_DIGITS } from 'input-otp'
+import { useMutation } from '@tanstack/react-query'
+import { generateToken } from '@/lib/generate-token'
+import { axiosClient } from '@/http/axios'
+import { signOut, useSession } from 'next-auth/react'
+import { toast } from 'sonner'
 
 const EmailForm = () => {
 	const [verify, setVerify] = useState(false)
+	const { data: session } = useSession()
 
 	const emailForm = useForm<z.infer<typeof oldEmailSchema>>({
 		resolver: zodResolver(oldEmailSchema),
-		defaultValues: { email: '', oldEmail: 'info@sammi.ac' },
+		defaultValues: { email: '', oldEmail: session?.currentUser?.email },
 	})
 
 	const otpForm = useForm<z.infer<typeof otpSchema>>({
@@ -28,14 +34,45 @@ const EmailForm = () => {
 		defaultValues: { otp: '', email: '' },
 	})
 
+	const otpMutation = useMutation({
+		mutationFn: async (email: string) => {
+			const token = await generateToken(session?.currentUser?._id)
+			const { data } = await axiosClient.post<{ email: string }>(
+				'/api/user/send-otp',
+				{ email },
+				{ headers: { Authorization: `Bearer ${token}` } }
+			)
+			return data
+		},
+		onSuccess: ({ email }) => {
+			toast('OTP sent to your email')
+			otpForm.setValue('email', email)
+			setVerify(true)
+		},
+	})
+
 	function onEmailSubmit(values: z.infer<typeof oldEmailSchema>) {
-		console.log(values)
-		otpForm.setValue('email', values.email)
-		setVerify(true)
+		otpMutation.mutate(values.email)
 	}
 
+	const verifyMutation = useMutation({
+		mutationFn: async (otp: string) => {
+			const token = await generateToken(session?.currentUser?._id)
+			const { data } = await axiosClient.put(
+				'/api/user/email',
+				{ email: otpForm.getValues('email'), otp },
+				{ headers: { Authorization: `Bearer ${token}` } }
+			)
+			return data
+		},
+		onSuccess: () => {
+			toast('Email updated successfully')
+			signOut()
+		},
+	})
+
 	function onVerifySubmit(values: z.infer<typeof otpSchema>) {
-		console.log(values)
+		verifyMutation.mutate(values.otp)
 	}
 	return !verify ? (
 		<Form {...emailForm}>
@@ -66,6 +103,7 @@ const EmailForm = () => {
 								<Input
 									placeholder='info@sammi.ac'
 									className='h-10 bg-secondary'
+									disabled={otpMutation.isPending}
 									{...field}
 								/>
 							</FormControl>
@@ -73,7 +111,11 @@ const EmailForm = () => {
 						</FormItem>
 					)}
 				/>
-				<Button type='submit' className='w-full'>
+				<Button
+					type='submit'
+					className='w-full'
+					disabled={otpMutation.isPending}
+				>
 					Verify email
 				</Button>
 			</form>
@@ -101,6 +143,7 @@ const EmailForm = () => {
 									maxLength={6}
 									className='w-full'
 									pattern={REGEXP_ONLY_DIGITS}
+									disabled={verifyMutation.isPending}
 									{...field}
 								>
 									<InputOTPGroup className='w-full '>
@@ -138,7 +181,11 @@ const EmailForm = () => {
 						</FormItem>
 					)}
 				/>
-				<Button type='submit' className='w-full'>
+				<Button
+					type='submit'
+					className='w-full'
+					disabled={verifyMutation.isPending}
+				>
 					Submit
 				</Button>
 			</form>

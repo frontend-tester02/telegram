@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/use-auth'
 import { axiosClient } from '@/http/axios'
 import { otpSchema } from '@/lib/validation'
-import { IError, IUser } from '@/types'
+import { IUser } from '@/types'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { REGEXP_ONLY_DIGITS } from 'input-otp'
@@ -45,12 +45,6 @@ const Verify = () => {
 		onSuccess: ({ user }) => {
 			signIn('credentials', { email: user.email, callbackUrl: '/' })
 			toast('Successfully verified')
-		},
-		onError: (error: IError) => {
-			if (error.response?.data?.message) {
-				return toast(`${error.response.data.message}`)
-			}
-			return toast('Something went wrong')
 		},
 	})
 

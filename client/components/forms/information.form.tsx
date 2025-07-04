@@ -14,16 +14,40 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Button } from '../ui/button'
+import { useMutation } from '@tanstack/react-query'
+import { axiosClient } from '@/http/axios'
+import { toast } from 'sonner'
+import { useSession } from 'next-auth/react'
+import { generateToken } from '@/lib/generate-token'
 
 const InformationForm = () => {
+	const { data: session, update } = useSession()
+
 	const form = useForm<z.infer<typeof profileSchema>>({
 		resolver: zodResolver(profileSchema),
-		defaultValues: { firstName: '', lastName: '', bio: '' },
+		defaultValues: {
+			firstName: session?.currentUser?.firstName,
+			lastName: session?.currentUser?.lastName,
+			bio: session?.currentUser?.bio,
+		},
+	})
+
+	const { mutate, isPending } = useMutation({
+		mutationFn: async (payload: z.infer<typeof profileSchema>) => {
+			const token = await generateToken(session?.currentUser?._id)
+			const { data } = await axiosClient.put('/api/user/profile', payload, {
+				headers: { Authorization: `Bearer ${token}` },
+			})
+			return data
+		},
+		onSuccess: () => {
+			toast('Profile updated successfully')
+			update()
+		},
 	})
 
 	const onSubmit = (data: z.infer<typeof profileSchema>) => {
-		// Handle form submission
-		console.log(data)
+		mutate(data)
 	}
 
 	return (
@@ -36,7 +60,12 @@ const InformationForm = () => {
 						<FormItem>
 							<Label>First name</Label>
 							<FormControl>
-								<Input placeholder='Oman' className='bg-secondary' {...field} />
+								<Input
+									placeholder='Oman'
+									className='bg-secondary'
+									disabled={isPending}
+									{...field}
+								/>
 							</FormControl>
 							<FormMessage className='text-xs text-red-500' />
 						</FormItem>
@@ -49,7 +78,12 @@ const InformationForm = () => {
 						<FormItem>
 							<Label>Last name</Label>
 							<FormControl>
-								<Input placeholder='Ali' className='bg-secondary' {...field} />
+								<Input
+									placeholder='Ali'
+									className='bg-secondary'
+									disabled={isPending}
+									{...field}
+								/>
 							</FormControl>
 						</FormItem>
 					)}
@@ -64,13 +98,18 @@ const InformationForm = () => {
 								<Textarea
 									placeholder='Enter anyhting about yourself'
 									className='bg-secondary'
+									disabled={isPending}
 									{...field}
 								/>
 							</FormControl>
 						</FormItem>
 					)}
 				/>
-				<Button type='submit' className='w-full'>
+				<Button
+					type='submit'
+					className='w-full text-white'
+					disabled={isPending}
+				>
 					Submit
 				</Button>
 			</form>
