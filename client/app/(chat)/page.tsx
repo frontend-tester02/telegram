@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ContactList from './_components/contact-list'
 import { useRouter } from 'next/navigation'
 import AddContact from './_components/add-contact'
@@ -19,14 +19,18 @@ import { IError, IUser } from '@/types'
 import { generateToken } from '@/lib/generate-token'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-
+import { io } from 'socket.io-client'
+import { useAuth } from '@/hooks/use-auth'
 const HomePage = () => {
 	const [contacts, setContacts] = useState<IUser[]>([])
 
 	const { setCreating, setLoading, isLoading } = useLoading()
 	const { currentContact } = useCurrentContact()
 	const { data: session } = useSession()
+	const { setOnlineUsers } = useAuth()
+
 	const router = useRouter()
+	const socket = useRef<ReturnType<typeof io> | null>(null)
 
 	const contactForm = useForm<z.infer<typeof emailSchema>>({
 		resolver: zodResolver(emailSchema),
@@ -63,11 +67,20 @@ const HomePage = () => {
 
 	useEffect(() => {
 		router.replace('/')
+		socket.current = io('ws://localhost:8080')
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	useEffect(() => {
 		if (session?.currentUser?._id) {
+			socket.current?.emit('addOnlineUser', session.currentUser)
+			socket.current?.on(
+				'getOnlineUsers',
+				(data: { socketId: string; user: IUser }[]) => {
+					setOnlineUsers(data.map(item => item.user))
+				}
+			)
 			getContacts()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
