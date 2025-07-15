@@ -16,13 +16,17 @@ import { FC, useRef } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
 import { useTheme } from 'next-themes'
+import { useLoading } from '@/hooks/use-loading'
+import { IMessage } from '@/types'
 
 interface Props {
 	messageForm: UseFormReturn<z.infer<typeof messageSchema>>
 	onSendMessage: (values: z.infer<typeof messageSchema>) => void
+	messages: IMessage[]
 }
 
-const Chat: FC<Props> = ({ onSendMessage, messageForm }) => {
+const Chat: FC<Props> = ({ onSendMessage, messageForm, messages }) => {
+	const { loadMessages } = useLoading()
 	const { resolvedTheme } = useTheme()
 	const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -44,21 +48,25 @@ const Chat: FC<Props> = ({ onSendMessage, messageForm }) => {
 	return (
 		<div className='flex flex-col justify-end z-40 min-h-[92vh]'>
 			{/* Loading */}
-			{/* <ChatLoading /> */}
+			{loadMessages && <ChatLoading />}
 			{/* Messages */}
-			{/* <MessageCard /> */}
+			{messages.map((message, index) => (
+				<MessageCard key={index} message={message} />
+			))}
 
 			{/* Start conversation */}
-			{/* <div className='w-full h-[88vh] flex items-center justify-center '>
-				<div
-					className='cursor-pointer flex flex-wrap flex-col justify-center items-center border border- border-secondary bg-secondary '
-					onClick={() => onSendMessage({ text: '✋' })}
-				>
-					<p className='text-md mt-6'>No messages yet...</p>
-					<p className='text-md'>Send a message or tap the greeting below.</p>
-					<p className='text-[100px]'>✋</p>
+			{messages.length === 0 && (
+				<div className='w-full h-[88vh] flex items-center justify-center '>
+					<div
+						className='cursor-pointer flex flex-wrap flex-col justify-center items-center border border- border-secondary bg-secondary '
+						onClick={() => onSendMessage({ text: '✋' })}
+					>
+						<p className='text-md mt-6'>No messages yet...</p>
+						<p className='text-md'>Send a message or tap the greeting below.</p>
+						<p className='text-[100px]'>✋</p>
+					</div>
 				</div>
-			</div> */}
+			)}
 
 			{/* Message input */}
 			<Form {...messageForm}>

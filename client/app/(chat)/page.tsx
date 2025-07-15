@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
@@ -15,19 +16,22 @@ import Chat from './_components/chat'
 import { useLoading } from '@/hooks/use-loading'
 import { useSession } from 'next-auth/react'
 import { axiosClient } from '@/http/axios'
-import { IError, IUser } from '@/types'
+import { IError, IMessage, IUser } from '@/types'
 import { generateToken } from '@/lib/generate-token'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/hooks/use-auth'
+import useAudio from '@/hooks/use-audio'
 const HomePage = () => {
 	const [contacts, setContacts] = useState<IUser[]>([])
+	const [messages, setMessages] = useState<IMessage[]>([])
 
-	const { setCreating, setLoading, isLoading } = useLoading()
+	const { setCreating, setLoading, isLoading, setLoadMessages } = useLoading()
 	const { currentContact } = useCurrentContact()
 	const { data: session } = useSession()
 	const { setOnlineUsers } = useAuth()
+	const { playSound } = useAudio()
 
 	const router = useRouter()
 	const socket = useRef<ReturnType<typeof io> | null>(null)
@@ -65,11 +69,29 @@ const HomePage = () => {
 		}
 	}
 
+	const getMessages = async () => {
+		setLoadMessages(true)
+		const token = await generateToken(session?.currentUser?._id)
+
+		try {
+			const { data } = await axiosClient.get<{ messages: IMessage[] }>(
+				`/api/user/messages/${currentContact?._id}`,
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+
+			setMessages(data.messages)
+		} catch {
+			toast('Cannot fetch messages')
+		} finally {
+			setLoadMessages(false)
+		}
+	}
+
 	useEffect(() => {
 		router.replace('/')
 		socket.current = io('ws://localhost:8080')
-
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	useEffect(() => {
@@ -83,8 +105,38 @@ const HomePage = () => {
 			)
 			getContacts()
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [session?.currentUser])
+
+	useEffect(() => {
+		if (session?.currentUser) {
+			socket.current?.on('getCreatedUser', user => {
+				setContacts(prev => {
+					const isExist = prev.some(item => item._id === user._id)
+					return isExist ? prev : [...prev, user]
+				})
+			})
+
+			socket.current?.on(
+				'getNewMessage',
+				({ newMessage, receiver, sender }: GetSocketType) => {
+					setMessages(prev => {
+						const isExist = prev.some(item => item._id === newMessage._id)
+						return isExist ? prev : [...prev, newMessage]
+					})
+					toast(`${sender?.email.split('@')[0]} sent you a message`)
+					if (!receiver.muted) {
+						playSound(receiver.notificationSound)
+					}
+				}
+			)
+		}
+	}, [session?.currentUser, socket])
+
+	useEffect(() => {
+		if (currentContact?._id) {
+			getMessages()
+		}
+	}, [currentContact])
 
 	const onCreateContact = async (values: z.infer<typeof emailSchema>) => {
 		setCreating(true)
@@ -98,6 +150,10 @@ const HomePage = () => {
 				}
 			)
 			setContacts(prev => [...prev, data.contact])
+			socket.current?.emit('createContact', {
+				currentUser: session?.currentUser,
+				receiver: data.contact,
+			})
 			toast('Contact added successfully')
 			contactForm.reset()
 		} catch (error: any) {
@@ -110,8 +166,31 @@ const HomePage = () => {
 		}
 	}
 
-	const onSendMessage = (values: z.infer<typeof messageSchema>) => {
-		console.log(values)
+	const onSendMessage = async (values: z.infer<typeof messageSchema>) => {
+		setCreating(true)
+		const token = await generateToken(session?.currentUser?._id)
+
+		try {
+			const { data } = await axiosClient.post<GetSocketType>(
+				'/api/user/message',
+				{
+					...values,
+					receiver: currentContact?._id,
+				},
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+			setMessages(prev => [...prev, data.newMessage])
+			messageForm.reset()
+			socket.current?.emit('sendMessage', {
+				newMessage: data.newMessage,
+				receiver: data.receiver,
+				sender: data.sender,
+			})
+		} catch {
+			toast('Cannot send message')
+		}
 	}
 	return (
 		<>
@@ -143,7 +222,11 @@ const HomePage = () => {
 						{/* Top chat */}
 						<TopChat />
 						{/* Chat message */}
-						<Chat messageForm={messageForm} onSendMessage={onSendMessage} />
+						<Chat
+							messageForm={messageForm}
+							onSendMessage={onSendMessage}
+							messages={messages}
+						/>
 					</div>
 				)}
 			</div>
@@ -152,3 +235,9 @@ const HomePage = () => {
 }
 
 export default HomePage
+
+interface GetSocketType {
+	receiver: IUser
+	sender: IUser
+	newMessage: IMessage
+}

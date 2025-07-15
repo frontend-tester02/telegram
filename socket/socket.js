@@ -15,17 +15,42 @@ const addOnlineUser = (user, socketId) => {
 	}
 }
 
+const getSocketId = userId => {
+	const user = users.find(u => u.user._id.toString() === userId.toString())
+	return user ? user.socketId : null
+}
+
 io.on('connection', socket => {
 	console.log('User connected', socket.id)
 
 	socket.on('addOnlineUser', user => {
-		addOnlineUser(user, socket._id)
+		addOnlineUser(user, socket.id)
 		io.emit('getOnlineUsers', users)
 	})
 
+	socket.on('createContact', ({ currentUser, receiver }) => {
+		const receiverSocketId = getSocketId(receiver._id)
+		console.log('Id', receiverSocketId)
+
+		if (receiverSocketId) {
+			socket.to(receiverSocketId).emit('getCreatedUser', currentUser)
+		}
+	})
+
+	socket.on('sendMessage', ({ newMessage, receiver, sender }) => {
+		const receiverSocketId = getSocketId(receiver._id)
+		console.log(receiverSocketId)
+
+		if (receiverSocketId) {
+			socket
+				.to(receiverSocketId)
+				.emit('getNewMessage', { newMessage, sender, receiver })
+		}
+	})
+
 	socket.on('disconnect', () => {
-		console.log('User disconnected', socket._id)
-		users = users.filter(u => u.socketId !== socket._id)
+		console.log('User disconnected', socket.id)
+		users = users.filter(u => u.socketId !== socket.id)
 		io.emit('getOnlineUsers', users)
 	})
 })
