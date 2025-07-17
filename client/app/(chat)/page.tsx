@@ -29,7 +29,8 @@ const HomePage = () => {
 	const [messages, setMessages] = useState<IMessage[]>([])
 
 	const { setCreating, setLoading, isLoading, setLoadMessages } = useLoading()
-	const { currentContact } = useCurrentContact()
+	const { currentContact, editedMessage, setEditedMessage } =
+		useCurrentContact()
 	const { data: session } = useSession()
 	const { setOnlineUsers } = useAuth()
 	const { playSound } = useAudio()
@@ -171,8 +172,62 @@ const HomePage = () => {
 					})
 				})
 			})
+			socket.current?.on(
+				'getUpdatedMessage',
+				({ updatedMessage, sender }: GetSocketType) => {
+					setMessages(prev =>
+						prev.map(item =>
+							item._id === updatedMessage._id
+								? {
+										...item,
+										reaction: updatedMessage.reaction,
+										text: updatedMessage.text,
+								  }
+								: item
+						)
+					)
+					setContacts(prev =>
+						prev.map(item =>
+							item._id === sender._id
+								? {
+										...item,
+										lastMessage:
+											item.lastMessage?._id === updatedMessage._id
+												? updatedMessage
+												: item.lastMessage,
+								  }
+								: item
+						)
+					)
+				}
+			)
+
+			socket.current?.on(
+				'getDeletedMessage',
+				({ deletedMessage, sender, filteredMessages }: GetSocketType) => {
+					setMessages(prev =>
+						prev.filter(item => item._id !== deletedMessage._id)
+					)
+					const lastMessage = filteredMessages.length
+						? filteredMessages[filteredMessages.length - 1]
+						: null
+					setContacts(prev =>
+						prev.map(item =>
+							item._id === sender._id
+								? {
+										...item,
+										lastMessage:
+											item.lastMessage?._id === deletedMessage._id
+												? lastMessage
+												: item.lastMessage,
+								  }
+								: item
+						)
+					)
+				}
+			)
 		}
-	}, [session?.currentUser, socket])
+	}, [session?.currentUser, socket, CONTACT_ID])
 
 	useEffect(() => {
 		if (currentContact?._id) {
@@ -245,6 +300,60 @@ const HomePage = () => {
 		}
 	}
 
+	const onSubmitMessage = async (values: z.infer<typeof messageSchema>) => {
+		setCreating(true)
+		if (editedMessage?._id) {
+			onEditMessage(editedMessage._id, values.text)
+		} else {
+			onSendMessage(values)
+		}
+	}
+
+	const onEditMessage = async (messageId: string, text: string) => {
+		const token = await generateToken(session?.currentUser?._id)
+		try {
+			const { data } = await axiosClient.put<{ updatedMessage: IMessage }>(
+				`/api/user/message/${messageId}`,
+				{ text },
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+
+			setMessages(prev =>
+				prev.map(item =>
+					item._id === data.updatedMessage._id
+						? { ...item, text: data.updatedMessage.text }
+						: item
+				)
+			)
+
+			socket.current?.emit('updateMessage', {
+				updatedMessage: data.updatedMessage,
+				receiver: currentContact,
+				sender: session?.currentUser,
+			})
+
+			messageForm.reset()
+			setContacts(prev =>
+				prev.map(item =>
+					item._id === currentContact?._id
+						? {
+								...item,
+								lastMessage:
+									item.lastMessage?._id === messageId
+										? data.updatedMessage
+										: item.lastMessage,
+						  }
+						: item
+				)
+			)
+			setEditedMessage(null)
+		} catch {
+			toast('Cannor edit message')
+		}
+	}
+
 	const onReadMessages = async () => {
 		const receivedMessages = messages
 			.filter(message => message.receiver._id === session?.currentUser?._id)
@@ -275,6 +384,74 @@ const HomePage = () => {
 			})
 		} catch {
 			toast('Cannot read messages')
+		}
+	}
+
+	const onReaction = async (reaction: string, messageId: string) => {
+		const token = await generateToken(session?.currentUser?._id)
+		try {
+			const { data } = await axiosClient.post<{ updatedMessage: IMessage }>(
+				'/api/user/reaction',
+				{
+					reaction,
+					messageId,
+				},
+				{ headers: { Authorization: `Bearer ${token}` } }
+			)
+			setMessages(prev =>
+				prev.map(item =>
+					item._id === data.updatedMessage._id
+						? { ...item, reaction: data.updatedMessage.reaction }
+						: item
+				)
+			)
+			socket.current?.emit('updateMessage', {
+				updatedMessage: data.updatedMessage,
+				receiver: currentContact,
+				sender: session?.currentUser,
+			})
+		} catch {
+			toast('Cannot react to message')
+		}
+	}
+
+	const onDeleteMessage = async (messageId: string) => {
+		const token = await generateToken(session?.currentUser?._id)
+		try {
+			const { data } = await axiosClient.delete<{ deletedMessage: IMessage }>(
+				`/api/user/message/${messageId}`,
+				{
+					headers: { Authorization: `Bearer ${token}` },
+				}
+			)
+			const filteredMessages = messages.filter(
+				item => item._id !== data.deletedMessage._id
+			)
+			const lastMessage = filteredMessages.length
+				? filteredMessages[filteredMessages.length - 1]
+				: null
+			setMessages(filteredMessages)
+			socket.current?.emit('deleteMessage', {
+				deletedMessage: data.deletedMessage,
+				sender: session?.currentUser,
+				receiver: currentContact,
+				filteredMessages,
+			})
+			setContacts(prev =>
+				prev.map(item =>
+					item._id === currentContact?._id
+						? {
+								...item,
+								lastMessage:
+									item.lastMessage?._id === messageId
+										? lastMessage
+										: item.lastMessage,
+						  }
+						: item
+				)
+			)
+		} catch {
+			toast('Cannot delete message')
 		}
 	}
 
@@ -310,9 +487,11 @@ const HomePage = () => {
 						{/* Chat message */}
 						<Chat
 							messageForm={messageForm}
-							onSendMessage={onSendMessage}
+							onSubmitMessage={onSubmitMessage}
 							messages={messages}
 							onReadMessages={onReadMessages}
+							onReaction={onReaction}
+							onDeleteMessage={onDeleteMessage}
 						/>
 					</div>
 				)}
@@ -327,4 +506,7 @@ interface GetSocketType {
 	receiver: IUser
 	sender: IUser
 	newMessage: IMessage
+	updatedMessage: IMessage
+	deletedMessage: IMessage
+	filteredMessages: IMessage[]
 }

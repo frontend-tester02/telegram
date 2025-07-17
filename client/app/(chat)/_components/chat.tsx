@@ -19,22 +19,27 @@ import { z } from 'zod'
 import { useTheme } from 'next-themes'
 import { useLoading } from '@/hooks/use-loading'
 import { IMessage } from '@/types'
+import { useCurrentContact } from '@/hooks/use-current'
 
 interface Props {
 	messageForm: UseFormReturn<z.infer<typeof messageSchema>>
 	onReadMessages: () => Promise<void>
-	onSendMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
+	onSubmitMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
+	onReaction: (reaction: string, messageId: string) => Promise<void>
+	onDeleteMessage: (messageId: string) => Promise<void>
 	messages: IMessage[]
 }
 
 const Chat: FC<Props> = ({
-	onSendMessage,
+	onSubmitMessage,
 	messageForm,
 	messages,
 	onReadMessages,
+	onReaction,
+	onDeleteMessage,
 }) => {
 	const { loadMessages } = useLoading()
-
+	const { editedMessage } = useCurrentContact()
 	const scrollRef = useRef<HTMLFormElement | null>(null)
 	const { resolvedTheme } = useTheme()
 	const inputRef = useRef<HTMLInputElement | null>(null)
@@ -43,6 +48,13 @@ const Chat: FC<Props> = ({
 		scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
 		onReadMessages()
 	}, [messages])
+
+	useEffect(() => {
+		if (editedMessage) {
+			messageForm.setValue('text', editedMessage.text)
+			scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+		}
+	}, [editedMessage])
 
 	const handleEmojiSelect = (emoji: string) => {
 		const input = inputRef.current
@@ -65,7 +77,12 @@ const Chat: FC<Props> = ({
 			{loadMessages && <ChatLoading />}
 			{/* Messages */}
 			{messages.map((message, index) => (
-				<MessageCard key={index} message={message} />
+				<MessageCard
+					key={index}
+					message={message}
+					onReaction={onReaction}
+					onDeleteMessage={onDeleteMessage}
+				/>
 			))}
 
 			{/* Start conversation */}
@@ -73,7 +90,7 @@ const Chat: FC<Props> = ({
 				<div className='w-full h-[88vh] flex items-center justify-center '>
 					<div
 						className='cursor-pointer flex flex-wrap flex-col justify-center items-center border border- border-secondary bg-secondary '
-						onClick={() => onSendMessage({ text: '✋' })}
+						onClick={() => onSubmitMessage({ text: '✋' })}
 					>
 						<p className='text-md mt-6'>No messages yet...</p>
 						<p className='text-md'>Send a message or tap the greeting below.</p>
@@ -85,7 +102,7 @@ const Chat: FC<Props> = ({
 			{/* Message input */}
 			<Form {...messageForm}>
 				<form
-					onSubmit={messageForm.handleSubmit(onSendMessage)}
+					onSubmit={messageForm.handleSubmit(onSubmitMessage)}
 					className='w-full flex relative'
 					ref={scrollRef}
 				>
