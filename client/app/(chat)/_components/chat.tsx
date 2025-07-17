@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import MessageCard from '@/components/cards/message.card'
 import ChatLoading from '@/components/loadings/chat.loading'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/popover'
 import { messageSchema } from '@/lib/validation'
 import { Paperclip, Send, Smile } from 'lucide-react'
-import { FC, useRef } from 'react'
+import { FC, useEffect, useRef } from 'react'
 // import emojies from '@emoji-mart/data'
 // import Picker from '@emoji-mart/react'
 import { UseFormReturn } from 'react-hook-form'
@@ -21,14 +22,27 @@ import { IMessage } from '@/types'
 
 interface Props {
 	messageForm: UseFormReturn<z.infer<typeof messageSchema>>
-	onSendMessage: (values: z.infer<typeof messageSchema>) => void
+	onReadMessages: () => Promise<void>
+	onSendMessage: (values: z.infer<typeof messageSchema>) => Promise<void>
 	messages: IMessage[]
 }
 
-const Chat: FC<Props> = ({ onSendMessage, messageForm, messages }) => {
+const Chat: FC<Props> = ({
+	onSendMessage,
+	messageForm,
+	messages,
+	onReadMessages,
+}) => {
 	const { loadMessages } = useLoading()
+
+	const scrollRef = useRef<HTMLFormElement | null>(null)
 	const { resolvedTheme } = useTheme()
 	const inputRef = useRef<HTMLInputElement | null>(null)
+
+	useEffect(() => {
+		scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+		onReadMessages()
+	}, [messages])
 
 	const handleEmojiSelect = (emoji: string) => {
 		const input = inputRef.current
@@ -73,6 +87,7 @@ const Chat: FC<Props> = ({ onSendMessage, messageForm, messages }) => {
 				<form
 					onSubmit={messageForm.handleSubmit(onSendMessage)}
 					className='w-full flex relative'
+					ref={scrollRef}
 				>
 					<Button size={'icon'} type='button' variant={'secondary'}>
 						<Paperclip />

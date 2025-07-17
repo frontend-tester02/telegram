@@ -4,7 +4,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import ContactList from './_components/contact-list'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AddContact from './_components/add-contact'
 import { useCurrentContact } from '@/hooks/use-current'
 import { useForm } from 'react-hook-form'
@@ -23,6 +23,7 @@ import { Loader2 } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/hooks/use-auth'
 import useAudio from '@/hooks/use-audio'
+import { CONST } from '@/lib/constants'
 const HomePage = () => {
 	const [contacts, setContacts] = useState<IUser[]>([])
 	const [messages, setMessages] = useState<IMessage[]>([])
@@ -33,8 +34,11 @@ const HomePage = () => {
 	const { setOnlineUsers } = useAuth()
 	const { playSound } = useAudio()
 
+	const searchParams = useSearchParams()
 	const router = useRouter()
 	const socket = useRef<ReturnType<typeof io> | null>(null)
+
+	const CONTACT_ID = searchParams.get('chat')
 
 	const contactForm = useForm<z.infer<typeof emailSchema>>({
 		resolver: zodResolver(emailSchema),
@@ -82,6 +86,18 @@ const HomePage = () => {
 			)
 
 			setMessages(data.messages)
+			setContacts(prev =>
+				prev.map(item =>
+					item._id === currentContact?._id
+						? {
+								...item,
+								lastMessage: item.lastMessage
+									? { ...item.lastMessage, status: CONST.READ }
+									: null,
+						  }
+						: item
+				)
+			)
 		} catch {
 			toast('Cannot fetch messages')
 		} finally {
@@ -123,12 +139,38 @@ const HomePage = () => {
 						const isExist = prev.some(item => item._id === newMessage._id)
 						return isExist ? prev : [...prev, newMessage]
 					})
+					setContacts(prev => {
+						return prev.map(contact => {
+							if (contact._id === sender._id) {
+								return {
+									...contact,
+									lastMessage: {
+										...newMessage,
+										status:
+											CONTACT_ID === sender._id
+												? CONST.READ
+												: newMessage.status,
+									},
+								}
+							}
+							return contact
+						})
+					})
 					toast(`${sender?.email.split('@')[0]} sent you a message`)
 					if (!receiver.muted) {
 						playSound(receiver.notificationSound)
 					}
 				}
 			)
+
+			socket.current?.on('getReadMessages', (messages: IMessage[]) => {
+				setMessages(prev => {
+					return prev.map(item => {
+						const message = messages.find(msg => msg._id === item._id)
+						return message ? { ...item, status: CONST.READ } : item
+					})
+				})
+			})
 		}
 	}, [session?.currentUser, socket])
 
@@ -182,6 +224,16 @@ const HomePage = () => {
 				}
 			)
 			setMessages(prev => [...prev, data.newMessage])
+			setContacts(prev =>
+				prev.map(item =>
+					item._id === currentContact?._id
+						? {
+								...item,
+								lastMessage: { ...data.newMessage, status: CONST.READ },
+						  }
+						: item
+				)
+			)
 			messageForm.reset()
 			socket.current?.emit('sendMessage', {
 				newMessage: data.newMessage,
@@ -192,6 +244,40 @@ const HomePage = () => {
 			toast('Cannot send message')
 		}
 	}
+
+	const onReadMessages = async () => {
+		const receivedMessages = messages
+			.filter(message => message.receiver._id === session?.currentUser?._id)
+			.filter(message => message.status !== CONST.READ)
+
+		if (receivedMessages.length === 0) return
+
+		const token = await generateToken(session?.currentUser?._id)
+
+		try {
+			const { data } = await axiosClient.post<{ messages: IMessage[] }>(
+				'/api/user/message-read',
+				{
+					messages: receivedMessages,
+				},
+				{ headers: { Authorization: `Bearer ${token}` } }
+			)
+
+			socket.current?.emit('readMessage', {
+				receiver: currentContact,
+				messages: data.messages,
+			})
+			setMessages(prev => {
+				return prev.map(item => {
+					const message = data.messages.find(msg => msg._id === item._id)
+					return message ? { ...item, status: CONST.READ } : item
+				})
+			})
+		} catch {
+			toast('Cannot read messages')
+		}
+	}
+
 	return (
 		<>
 			{/* Sidebar */}
@@ -226,6 +312,7 @@ const HomePage = () => {
 							messageForm={messageForm}
 							onSendMessage={onSendMessage}
 							messages={messages}
+							onReadMessages={onReadMessages}
 						/>
 					</div>
 				)}
