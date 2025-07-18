@@ -1,22 +1,18 @@
 const io = require('socket.io')(8080, {
-	cors: {
-		origin: '*',
-		methods: ['GET', 'POST'],
-	},
+	cors: { origin: '*', methods: ['GET', 'POST'] },
 })
 
-let users = []
+let users = [] // {user, socketId}
 
 const addOnlineUser = (user, socketId) => {
 	const checkUser = users.find(u => u.user._id === user._id)
-
 	if (!checkUser) {
 		users.push({ user, socketId })
 	}
 }
 
 const getSocketId = userId => {
-	const user = users.find(u => u.user._id.toString() === userId.toString())
+	const user = users.find(u => u.user._id === userId)
 	return user ? user.socketId : null
 }
 
@@ -30,8 +26,6 @@ io.on('connection', socket => {
 
 	socket.on('createContact', ({ currentUser, receiver }) => {
 		const receiverSocketId = getSocketId(receiver._id)
-		console.log('Id', receiverSocketId)
-
 		if (receiverSocketId) {
 			socket.to(receiverSocketId).emit('getCreatedUser', currentUser)
 		}
@@ -39,8 +33,6 @@ io.on('connection', socket => {
 
 	socket.on('sendMessage', ({ newMessage, receiver, sender }) => {
 		const receiverSocketId = getSocketId(receiver._id)
-		console.log(receiverSocketId)
-
 		if (receiverSocketId) {
 			socket
 				.to(receiverSocketId)
@@ -48,7 +40,7 @@ io.on('connection', socket => {
 		}
 	})
 
-	socket.on('readMessage', ({ receiver, messages }) => {
+	socket.on('readMessages', ({ receiver, messages }) => {
 		const receiverSocketId = getSocketId(receiver._id)
 		if (receiverSocketId) {
 			socket.to(receiverSocketId).emit('getReadMessages', messages)
@@ -77,6 +69,13 @@ io.on('connection', socket => {
 			}
 		}
 	)
+
+	socket.on('typing', ({ receiver, sender, message }) => {
+		const receiverSocketId = getSocketId(receiver._id)
+		if (receiverSocketId) {
+			socket.to(receiverSocketId).emit('getTyping', { sender, message })
+		}
+	})
 
 	socket.on('disconnect', () => {
 		console.log('User disconnected', socket.id)
