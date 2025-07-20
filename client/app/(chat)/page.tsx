@@ -301,6 +301,9 @@ const HomePage = () => {
 				receiver: data.receiver,
 				sender: data.sender,
 			})
+			if (!data.sender.muted) {
+				playSound(data.sender.sendingSound)
+			}
 		} catch {
 			toast('Cannot send message')
 		} finally {
@@ -473,7 +476,7 @@ const HomePage = () => {
 	return (
 		<>
 			{/* Sidebar */}
-			<div className='w-80 h-screen border-r fixed inset-0 z-50'>
+			<div className='w-80 max-md:w-16 h-screen border-r fixed inset-0 z-50'>
 				{/* Loading */}
 				{isLoading && (
 					<div className='w-full h-[95vh] flex justify-center items-center'>
@@ -486,7 +489,7 @@ const HomePage = () => {
 			</div>
 
 			{/* Chat area */}
-			<div className='pl-80 w-full'>
+			<div className='max-md:pl-16 pl-80 w-full'>
 				{/* Add contacts */}
 				{!currentContact?._id && (
 					<AddContact

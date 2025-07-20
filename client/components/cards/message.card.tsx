@@ -32,8 +32,8 @@ const MessageCard: FC<Props> = ({ message, onReaction, onDeleteMessage }) => {
 					className={cn(
 						'm-2.5 font-medium text-xs flex',
 						message.receiver._id === currentContact?._id
-							? 'justify-start'
-							: 'justify-end'
+							? 'justify-end'
+							: 'justify-start'
 					)}
 				>
 					<div
@@ -53,7 +53,7 @@ const MessageCard: FC<Props> = ({ message, onReaction, onDeleteMessage }) => {
 							/>
 						)}
 						{message.text.length > 0 && (
-							<p className='text-sm text-white'>{message.text}</p>
+							<p className='text-sm '>{message.text}</p>
 						)}
 						<div className='right-1 bottom-0 absolute opacity-60 text-[9px] flex gap-[3px]'>
 							<p>{format(message.updatedAt, 'hh:mm')}</p>

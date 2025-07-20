@@ -57,7 +57,7 @@ const NotificationForm = () => {
 							Select <ChevronDown />
 						</Button>
 					</PopoverTrigger>
-					<PopoverContent className='w-80 absolute -right-12'>
+					<PopoverContent className='w-80 absolute -right-12 overflow-y-scroll sidebar-custom-scrollbar'>
 						<div className='flex flex-col space-y-1'>
 							{SOUNDS.map(sound => (
 								<div
@@ -112,7 +112,7 @@ const NotificationForm = () => {
 							Select <ChevronDown />
 						</Button>
 					</PopoverTrigger>
-					<PopoverContent className='w-80 absolute -right-12'>
+					<PopoverContent className='w-80 absolute -right-12 overflow-y-scroll sidebar-custom-scrollbar'>
 						<div className='flex flex-col space-y-1'>
 							{SOUNDS.map(sound => (
 								<div
