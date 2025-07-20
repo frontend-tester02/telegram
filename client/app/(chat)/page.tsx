@@ -1,29 +1,29 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client'
 
-import React, { ChangeEvent, useEffect, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import ContactList from './_components/contact-list'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { ChangeEvent, useEffect, useRef, useState } from 'react'
 import AddContact from './_components/add-contact'
 import { useCurrentContact } from '@/hooks/use-current'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { emailSchema, messageSchema } from '@/lib/validation'
+import { zodResolver } from '@hookform/resolvers/zod'
 import TopChat from './_components/top-chat'
 import Chat from './_components/chat'
 import { useLoading } from '@/hooks/use-loading'
-import { useSession } from 'next-auth/react'
 import { axiosClient } from '@/http/axios'
-import { IError, IMessage, IUser } from '@/types'
+import { useSession } from 'next-auth/react'
 import { generateToken } from '@/lib/generate-token'
-import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { IError, IMessage, IUser } from '@/types'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/hooks/use-auth'
 import useAudio from '@/hooks/use-audio'
 import { CONST } from '@/lib/constants'
+import { toast } from 'sonner'
+
 const HomePage = () => {
 	const [contacts, setContacts] = useState<IUser[]>([])
 	const [messages, setMessages] = useState<IMessage[]>([])
@@ -36,25 +36,16 @@ const HomePage = () => {
 	const { setOnlineUsers } = useAuth()
 	const { playSound } = useAudio()
 
-	const searchParams = useSearchParams()
-	const router = useRouter()
 	const socket = useRef<ReturnType<typeof io> | null>(null)
-
-	const CONTACT_ID = searchParams.get('chat')
 
 	const contactForm = useForm<z.infer<typeof emailSchema>>({
 		resolver: zodResolver(emailSchema),
-		defaultValues: {
-			email: '',
-		},
+		defaultValues: { email: '' },
 	})
 
 	const messageForm = useForm<z.infer<typeof messageSchema>>({
 		resolver: zodResolver(messageSchema),
-		defaultValues: {
-			text: '',
-			image: '',
-		},
+		defaultValues: { text: '', image: '' },
 	})
 
 	const getContacts = async () => {
@@ -78,7 +69,6 @@ const HomePage = () => {
 	const getMessages = async () => {
 		setLoadMessages(true)
 		const token = await generateToken(session?.currentUser?._id)
-
 		try {
 			const { data } = await axiosClient.get<{ messages: IMessage[] }>(
 				`/api/user/messages/${currentContact?._id}`,
@@ -86,7 +76,6 @@ const HomePage = () => {
 					headers: { Authorization: `Bearer ${token}` },
 				}
 			)
-
 			setMessages(data.messages)
 			setContacts(prev =>
 				prev.map(item =>
@@ -108,7 +97,6 @@ const HomePage = () => {
 	}
 
 	useEffect(() => {
-		router.replace('/')
 		socket.current = io('ws://localhost:8080')
 	}, [])
 
@@ -137,11 +125,8 @@ const HomePage = () => {
 			socket.current?.on(
 				'getNewMessage',
 				({ newMessage, sender, receiver }: GetSocketType) => {
-					console.log(newMessage)
-					console.log('CONTACT_ID', CONTACT_ID)
-
-					setTyping('')
-					if (CONTACT_ID === sender._id) {
+					setTyping({ message: '', sender: null })
+					if (currentContact?._id === newMessage.sender._id) {
 						setMessages(prev => [...prev, newMessage])
 					}
 					setContacts(prev => {
@@ -152,7 +137,7 @@ const HomePage = () => {
 									lastMessage: {
 										...newMessage,
 										status:
-											CONTACT_ID === sender._id
+											currentContact?._id === sender._id
 												? CONST.READ
 												: newMessage.status,
 									},
@@ -161,7 +146,6 @@ const HomePage = () => {
 							return contact
 						})
 					})
-					// toast({ title: 'New message', description: `${sender?.email.split('@')[0]} sent you a message` })
 					if (!receiver.muted) {
 						playSound(receiver.notificationSound)
 					}
@@ -180,7 +164,7 @@ const HomePage = () => {
 			socket.current?.on(
 				'getUpdatedMessage',
 				({ updatedMessage, sender }: GetSocketType) => {
-					setTyping('')
+					setTyping({ message: '', sender: null })
 					setMessages(prev =>
 						prev.map(item =>
 							item._id === updatedMessage._id
@@ -234,12 +218,12 @@ const HomePage = () => {
 			)
 
 			socket.current?.on('getTyping', ({ message, sender }: GetSocketType) => {
-				if (CONTACT_ID === sender._id) {
-					setTyping(message)
+				if (currentContact?._id === sender._id) {
+					setTyping({ message, sender })
 				}
 			})
 		}
-	}, [session?.currentUser, socket, CONTACT_ID])
+	}, [session?.currentUser, currentContact?._id])
 
 	useEffect(() => {
 		if (currentContact?._id) {
@@ -272,6 +256,15 @@ const HomePage = () => {
 			return toast('Something went wrong')
 		} finally {
 			setCreating(false)
+		}
+	}
+
+	const onSubmitMessage = async (values: z.infer<typeof messageSchema>) => {
+		setCreating(true)
+		if (editedMessage?._id) {
+			onEditMessage(editedMessage._id, values.text)
+		} else {
+			onSendMessage(values)
 		}
 	}
 
@@ -311,26 +304,14 @@ const HomePage = () => {
 		}
 	}
 
-	const onSubmitMessage = async (values: z.infer<typeof messageSchema>) => {
-		setCreating(true)
-		if (editedMessage?._id) {
-			onEditMessage(editedMessage._id, values.text)
-		} else {
-			onSendMessage(values)
-		}
-	}
-
 	const onEditMessage = async (messageId: string, text: string) => {
 		const token = await generateToken(session?.currentUser?._id)
 		try {
 			const { data } = await axiosClient.put<{ updatedMessage: IMessage }>(
 				`/api/user/message/${messageId}`,
 				{ text },
-				{
-					headers: { Authorization: `Bearer ${token}` },
-				}
+				{ headers: { Authorization: `Bearer ${token}` } }
 			)
-
 			setMessages(prev =>
 				prev.map(item =>
 					item._id === data.updatedMessage._id
@@ -338,13 +319,11 @@ const HomePage = () => {
 						: item
 				)
 			)
-
 			socket.current?.emit('updateMessage', {
 				updatedMessage: data.updatedMessage,
 				receiver: currentContact,
 				sender: session?.currentUser,
 			})
-
 			messageForm.reset()
 			setContacts(prev =>
 				prev.map(item =>
@@ -361,7 +340,7 @@ const HomePage = () => {
 			)
 			setEditedMessage(null)
 		} catch {
-			toast('Cannor edit message')
+			toast('Cannot edit message')
 		}
 	}
 
@@ -371,21 +350,16 @@ const HomePage = () => {
 			.filter(message => message.status !== CONST.READ)
 
 		if (receivedMessages.length === 0) return
-
 		const token = await generateToken(session?.currentUser?._id)
-
 		try {
 			const { data } = await axiosClient.post<{ messages: IMessage[] }>(
 				'/api/user/message-read',
-				{
-					messages: receivedMessages,
-				},
+				{ messages: receivedMessages },
 				{ headers: { Authorization: `Bearer ${token}` } }
 			)
-
-			socket.current?.emit('readMessage', {
-				receiver: currentContact,
+			socket.current?.emit('readMessages', {
 				messages: data.messages,
+				receiver: currentContact,
 			})
 			setMessages(prev => {
 				return prev.map(item => {
@@ -403,10 +377,7 @@ const HomePage = () => {
 		try {
 			const { data } = await axiosClient.post<{ updatedMessage: IMessage }>(
 				'/api/user/reaction',
-				{
-					reaction,
-					messageId,
-				},
+				{ reaction, messageId },
 				{ headers: { Authorization: `Bearer ${token}` } }
 			)
 			setMessages(prev =>
@@ -473,36 +444,29 @@ const HomePage = () => {
 			message: e.target.value,
 		})
 	}
+
 	return (
 		<>
-			{/* Sidebar */}
 			<div className='w-80 max-md:w-16 h-screen border-r fixed inset-0 z-50'>
-				{/* Loading */}
 				{isLoading && (
 					<div className='w-full h-[95vh] flex justify-center items-center'>
 						<Loader2 size={50} className='animate-spin' />
 					</div>
 				)}
 
-				{/* Contact list */}
 				{!isLoading && <ContactList contacts={contacts} />}
 			</div>
-
-			{/* Chat area */}
 			<div className='max-md:pl-16 pl-80 w-full'>
-				{/* Add contacts */}
 				{!currentContact?._id && (
 					<AddContact
 						contactForm={contactForm}
 						onCreateContact={onCreateContact}
 					/>
 				)}
-				{/* Chat */}
+
 				{currentContact?._id && (
 					<div className='w-full relative'>
-						{/* Top chat */}
 						<TopChat messages={messages} />
-						{/* Chat message */}
 						<Chat
 							messageForm={messageForm}
 							onSubmitMessage={onSubmitMessage}

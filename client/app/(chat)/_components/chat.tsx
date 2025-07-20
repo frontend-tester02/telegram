@@ -12,8 +12,8 @@ import {
 import { messageSchema } from '@/lib/validation'
 import { Paperclip, Send, Smile } from 'lucide-react'
 import { ChangeEvent, FC, useEffect, useRef, useState } from 'react'
-// import emojies from '@emoji-mart/data'
-// import Picker from '@emoji-mart/react'
+import emojies from '@emoji-mart/data'
+import Picker from '@emoji-mart/react'
 import { UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
 import { useTheme } from 'next-themes'
@@ -28,6 +28,7 @@ import {
 	DialogTrigger,
 } from '@/components/ui/dialog'
 import { UploadDropzone } from '@/lib/uploadthing'
+import { useSession } from 'next-auth/react'
 
 interface Props {
 	messageForm: UseFormReturn<z.infer<typeof messageSchema>>
@@ -50,10 +51,20 @@ const Chat: FC<Props> = ({
 }) => {
 	const [open, setOpen] = useState(false)
 	const { loadMessages } = useLoading()
-	const { editedMessage, setEditedMessage } = useCurrentContact()
+	const { editedMessage, setEditedMessage, currentContact } =
+		useCurrentContact()
+	const { data: session } = useSession()
 	const scrollRef = useRef<HTMLFormElement | null>(null)
 	const { resolvedTheme } = useTheme()
 	const inputRef = useRef<HTMLInputElement | null>(null)
+
+	const filteredMessages = messages.filter(
+		message =>
+			(message.sender._id === session?.currentUser?._id &&
+				message.receiver._id === currentContact?._id) ||
+			(message.sender._id === currentContact?._id &&
+				message.receiver._id === session?.currentUser?._id)
+	)
 
 	useEffect(() => {
 		scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -87,7 +98,7 @@ const Chat: FC<Props> = ({
 			{/* Loading */}
 			{loadMessages && <ChatLoading />}
 			{/* Messages */}
-			{messages.map((message, index) => (
+			{filteredMessages.map((message, index) => (
 				<MessageCard
 					key={index}
 					message={message}
@@ -167,13 +178,13 @@ const Chat: FC<Props> = ({
 							</Button>
 						</PopoverTrigger>
 						<PopoverContent className='p-0 border-none rounded-md absolute right-6 bottom-0'>
-							{/* <Picker
+							<Picker
 								data={emojies}
 								theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
 								onEmojiSelect={(emoji: { native: string }) =>
 									handleEmojiSelect(emoji.native)
 								}
-							/> */}
+							/>
 						</PopoverContent>
 					</Popover>
 
