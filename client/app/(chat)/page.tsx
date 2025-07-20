@@ -97,7 +97,7 @@ const HomePage = () => {
 	}
 
 	useEffect(() => {
-		socket.current = io('ws://localhost:8080')
+		socket.current = io(process.env.SOCKET_URL)
 	}, [])
 
 	useEffect(() => {
